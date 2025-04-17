@@ -89,22 +89,35 @@ async def chapters(manga_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Get page images for a chapter
-@app.get("/api/pages/{chapter_id}")
-async def pages(chapter_id: str):
+@app.get("/api/chapters/{manga_id}")
+async def chapters(manga_id: str):
     try:
+        url = (
+            f"https://api.mangadex.org/chapter?"
+            f"manga={manga_id}&translatedLanguage[]=en"
+            f"&order[chapter]=asc&limit=500"
+        )
         async with httpx.AsyncClient() as client:
-            res = await client.get(f"https://api.mangadex.org/at-home/server/{chapter_id}")
+            res = await client.get(url)
             res.raise_for_status()
+            chapters_raw = res.json().get("data", [])
 
-            json_data = res.json()
-            base_url = json_data["baseUrl"]
-            chapter = json_data["chapter"]
+            chapter_list = []
+            for c in chapters_raw:
+                try:
+                    attr = c.get("attributes", {})
+                    chapter_list.append({
+                        "id": c.get("id"),
+                        "chapter": attr.get("chapter") or None,
+                        "title": attr.get("title") or None
+                    })
+                except Exception as inner:
+                    print(f"Skipped malformed chapter entry: {c} → {inner}")
+                    continue
 
-            hash_value = chapter["hash"]
-            page_filenames = chapter["data"]
-
-            return [f"{base_url}/data/{hash_value}/{filename}" for filename in page_filenames]
+            print(f"✅ Loaded {len(chapter_list)} chapters for manga {manga_id}")
+            return chapter_list
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load pages: {str(e)}")
+        print("🔥 CHAPTER API ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to fetch chapters: {str(e)}")
