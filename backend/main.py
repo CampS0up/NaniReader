@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
@@ -23,6 +24,15 @@ app.add_middleware(
 def serve_index():
     return FileResponse(Path("frontend/index.html"))
 
+@app.get("/api/image-proxy")
+async def image_proxy(url: str):
+    async with httpx.AsyncClient() as client:
+        res = await client.get(url)
+        return StreamingResponse(
+            content=res.aiter_bytes(),
+            status_code=res.status_code,
+            media_type=res.headers.get("content-type", "image/jpeg")
+        )
 
 @app.get("/api/health")
 def health():

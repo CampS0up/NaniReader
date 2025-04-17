@@ -301,7 +301,7 @@ function switchScreen(id) {
       const res = await fetch(`${API}/manga/${mangaId}`);
       const detail = await res.json();
       document.getElementById("mangaDescription").innerText = detail.description;
-      document.getElementById("coverImage").src = detail.cover_url;
+      document.getElementById("coverImage").src = `/api/proxy?url=${encodeURIComponent(actualImageUrl)}`;
 
       const chapRes = await fetch(`${API}/chapters/${mangaId}`);
       currentChapters = await chapRes.json();
@@ -349,7 +349,7 @@ function switchScreen(id) {
       div.innerHTML = "";
       pages.forEach(url => {
         const img = document.createElement("img");
-        img.src = url;
+        img.src = `/api/image-proxy?url=${encodeURIComponent(actualImageUrl)}`;
         div.appendChild(img);
       });
 
