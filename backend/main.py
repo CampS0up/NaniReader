@@ -46,24 +46,38 @@ async def search(title: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Get manga description and cover
 @app.get("/api/manga/{manga_id}")
 async def manga_detail(manga_id: str):
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.get(f"https://api.mangadex.org/manga/{manga_id}?includes[]=cover_art")
+            res = await client.get(
+                f"https://api.mangadex.org/manga/{manga_id}?includes[]=cover_art"
+            )
             res.raise_for_status()
+
             data = res.json().get("data", {})
             attr = data.get("attributes", {})
-            cover_id = next((r["attributes"]["fileName"] for r in data.get("relationships", []) if r["type"] == "cover_art"), None)
+
+            cover_id = None
+            for rel in data.get("relationships", []):
+                if rel.get("type") == "cover_art":
+                    cover_id = rel["attributes"].get("fileName")
+                    break
+
+            cover_url = (
+                f"https://uploads.mangadex.org/covers/{manga_id}/{cover_id}.256.jpg"
+                if cover_id else None
+            )
 
             return {
                 "id": manga_id,
                 "title": attr.get("title", {}).get("en", "No Title"),
                 "description": attr.get("description", {}).get("en", "No Description"),
-                "cover_url": f"https://uploads.mangadex.org/covers/{manga_id}/{cover_id}" if cover_id else None
+                "cover_url": cover_url
             }
+
     except Exception as e:
+        print("🔥 MANGA DETAIL ERROR:", str(e))
         raise HTTPException(status_code=500, detail=f"Failed to fetch manga details: {str(e)}")
 
 # Get all English chapters for a manga
@@ -100,24 +114,25 @@ async def chapters(manga_id: str):
         async with httpx.AsyncClient() as client:
             res = await client.get(url)
             res.raise_for_status()
-            chapters_raw = res.json().get("data", [])
+
+            json_data = res.json()
+            print("🔍 RAW CHAPTER RESPONSE:")
+            print(json_data)
+
+            chapters_raw = json_data.get("data", [])
 
             chapter_list = []
             for c in chapters_raw:
-                try:
-                    attr = c.get("attributes", {})
-                    chapter_list.append({
-                        "id": c.get("id"),
-                        "chapter": attr.get("chapter") or None,
-                        "title": attr.get("title") or None
-                    })
-                except Exception as inner:
-                    print(f"Skipped malformed chapter entry: {c} → {inner}")
-                    continue
+                attr = c.get("attributes", {})
+                chapter_list.append({
+                    "id": c.get("id"),
+                    "chapter": attr.get("chapter"),
+                    "title": attr.get("title")
+                })
 
-            print(f"✅ Loaded {len(chapter_list)} chapters for manga {manga_id}")
+            print(f"✅ Loaded {len(chapter_list)} chapters")
             return chapter_list
 
     except Exception as e:
-        print("🔥 CHAPTER API ERROR:", str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to fetch chapters: {str(e)}")
+        print("🔥 CHAPTER FETCH ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=f"Chapter fetch failed: {str(e)}")
