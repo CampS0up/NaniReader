@@ -162,6 +162,9 @@
   <div id="mangaScreen" class="screen">
     <div class="back" onclick="goHome()">← Back to search</div>
     <h2 id="mangaTitle"></h2>
+      <button onclick="toggleFavorite({ id: currentMangaId, title: document.getElementById('mangaTitle').innerText })">
+        ❤️ Toggle Favorite
+      </button>
     <img id="coverImage" style="max-height: 250px;" />
     <p id="mangaDescription"></p>
     <div id="progressBarContainer" style="display: none;">

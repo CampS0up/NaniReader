@@ -23,6 +23,7 @@ app.add_middleware(
 def serve_index():
     return FileResponse(Path("frontend/index.html"))
 
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
