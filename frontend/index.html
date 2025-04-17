@@ -7,17 +7,68 @@
   <link rel="manifest" href="/static/manifest.json" />
   <meta name="theme-color" content="#ff4f4f" />
   <style>
-    body { font-family: system-ui, sans-serif; background: #fefefe; margin: 1rem; color: #222; }
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f4f4f4;
+      margin: 1rem;
+      color: #222;
+    }
     h1, h2 { margin: 0.5em 0; }
-    input, button { padding: 0.5em; font-size: 1rem; margin: 0.25em 0; }
+    input, button {
+      padding: 0.5em;
+      font-size: 1rem;
+      margin: 0.25em 0;
+    }
     button { cursor: pointer; }
     img { max-width: 100%; margin: 0.5em 0; border-radius: 4px; }
     .screen { display: none; }
     .visible { display: block; }
-    .read {opacity: 0.7;background-color: #eee; border: 2px solid #999; text-decoration: none; font-weight: bold;}
-    .chapter-button { display: block; margin: 0.2em 0; }
-    .nav-btns { display: flex; justify-content: space-between; margin: 1em 0; }
-    .back { margin-top: 1em; display: inline-block; cursor: pointer; color: #555; text-decoration: underline; }
+    .read {
+      opacity: 0.7;
+      background-color: #eee;
+      border: 2px solid #999;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .chapter-button {
+      display: block;
+      margin: 0.2em 0;
+      padding: 0.4em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .chapter-button.read::after {
+      content: " ✔️";
+      float: right;
+    }
+    .nav-btns {
+      display: flex;
+      justify-content: space-between;
+      margin: 1em 0;
+    }
+    .back {
+      margin-top: 1em;
+      display: inline-block;
+      cursor: pointer;
+      color: #555;
+      text-decoration: underline;
+    }
+    #progressBarContainer {
+      margin: 1em 0 0.5em 0;
+    }
+    #progressBarWrapper {
+      background: #ddd;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    #progressBar {
+      height: 10px;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .progress-low    { background: #e74c3c; }
+    .progress-mid    { background: #f39c12; }
+    .progress-high   { background: #2ecc71; }
   </style>
 </head>
 <body>
@@ -35,6 +86,14 @@
     <h2 id="mangaTitle"></h2>
     <img id="coverImage" />
     <p id="mangaDescription"></p>
+
+    <div id="progressBarContainer" style="display: none;">
+      <div style="font-size: 0.9em;" id="progressText">Progress: 0%</div>
+      <div id="progressBarWrapper">
+        <div id="progressBar" class="progress-low"></div>
+      </div>
+    </div>
+
     <h3>Chapters</h3>
     <div id="chapters"></div>
   </div>
@@ -58,19 +117,19 @@
     let currentChapters = [];
     let currentChapterIndex = 0;
 
-    const home = () => switchScreen("homeScreen");
-    const goToManga = () => switchScreen("mangaScreen");
     const switchScreen = id => {
       document.querySelectorAll(".screen").forEach(s => s.classList.remove("visible"));
       document.getElementById(id).classList.add("visible");
     };
+    const goHome = () => switchScreen("homeScreen");
+    const goToManga = () => switchScreen("mangaScreen");
 
     function getReadChapters(mangaId) {
-      return JSON.parse(localStorage.getItem(`read_${mangaId}`) || "[]");
+      return JSON.parse(localStorage.getItem("read_" + mangaId) || "[]");
     }
 
     function markChapterRead(mangaId, chapterId) {
-      const key = `read_${mangaId}`;
+      const key = "read_" + mangaId;
       const read = getReadChapters(mangaId);
       if (!read.includes(chapterId)) {
         read.push(chapterId);
@@ -136,16 +195,33 @@
 
       const div = document.getElementById("chapters");
       div.innerHTML = "";
+
+      let readCount = 0;
       currentChapters.forEach((ch, idx) => {
         const btn = document.createElement("button");
         let label = ch.chapter ? `Chapter ${ch.chapter}` : `Chapter ID ${ch.id.slice(0, 6)}…`;
         if (ch.title) label += ` — ${ch.title}`;
         btn.innerText = label;
         btn.className = "chapter-button";
-        if (read.includes(ch.id)) btn.classList.add("read");
+        btn.dataset.id = ch.id;
+        if (read.includes(ch.id)) {
+          btn.classList.add("read");
+          readCount++;
+        }
         btn.onclick = () => openChapter(idx);
         div.appendChild(btn);
       });
+
+      const percent = currentChapters.length > 0 ? Math.round((readCount / currentChapters.length) * 100) : 0;
+      const bar = document.getElementById("progressBar");
+      bar.style.width = percent + "%";
+      bar.className = "";
+      if (percent < 34) bar.classList.add("progress-low");
+      else if (percent < 67) bar.classList.add("progress-mid");
+      else bar.classList.add("progress-high");
+
+      document.getElementById("progressText").innerText = `Progress: ${percent}% (${readCount} of ${currentChapters.length})`;
+      document.getElementById("progressBarContainer").style.display = "block";
     }
 
     async function openChapter(index) {
@@ -163,6 +239,10 @@
         img.src = url;
         div.appendChild(img);
       });
+
+      document.querySelectorAll(".chapter-button").forEach(btn => {
+        if (btn.dataset.id === chapter.id) btn.classList.add("read");
+      });
     }
 
     function nextChapter() {
@@ -175,11 +255,6 @@
       if (currentChapterIndex > 0) {
         openChapter(currentChapterIndex - 1);
       }
-    }
-
-    function goHome() {
-      switchScreen("homeScreen");
-      document.getElementById("results").innerHTML = "";
     }
   </script>
 </body>
