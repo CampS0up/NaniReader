@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NaniReader 📖</title>
+  <link rel="manifest" href="/static/manifest.json" />
+  <meta name="theme-color" content="#ff4f4f" />
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #fdfdfd;
+      margin: 1rem;
+      color: #333;
+    }
+    h1 {
+      font-size: 1.8rem;
+    }
+    input, button {
+      padding: 0.6em;
+      font-size: 1rem;
+      margin: 0.25em 0;
+    }
+    button {
+      cursor: pointer;
+    }
+    img {
+      max-width: 100%;
+      margin: 0.5em 0;
+    }
+    .read {
+      opacity: 0.5;
+      text-decoration: line-through;
+    }
+    .chapter-button {
+      display: inline-block;
+      margin: 0.2em;
+    }
+    .fav {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <h1>📚 NaniReader</h1>
+  <input id="searchInput" placeholder="Search manga..." />
+  <button onclick="searchManga()">Search</button>
+  <button onclick="showFavorites()">⭐ Favorites</button>
+
+  <div id="results"></div>
+  <div id="chapters"></div>
+  <div id="pages"></div>
+
+  <script>
+    const API_BASE = "/api";
+
+    function getReadChapters(mangaId) {
+      return JSON.parse(localStorage.getItem(`read_${mangaId}`) || "[]");
+    }
+
+    function markChapterRead(mangaId, chapterId) {
+      const key = `read_${mangaId}`;
+      const read = getReadChapters(mangaId);
+      if (!read.includes(chapterId)) {
+        read.push(chapterId);
+        localStorage.setItem(key, JSON.stringify(read));
+      }
+    }
+
+    function isFavorite(id) {
+      const favs = JSON.parse(localStorage.getItem("favorites") || "[]");
+      return favs.find(f => f.id === id);
+    }
+
+    function toggleFavorite(manga) {
+      let favs = JSON.parse(localStorage.getItem("favorites") || "[]");
+      if (favs.find(f => f.id === manga.id)) {
+        favs = favs.filter(f => f.id !== manga.id);
+      } else {
+        favs.push(manga);
+      }
+      localStorage.setItem("favorites", JSON.stringify(favs));
+      showFavorites();
+    }
+
+    async function searchManga() {
+      const query = document.getElementById("searchInput").value;
+      const res = await fetch(`${API_BASE}/search?title=${encodeURIComponent(query)}`);
+      const mangas = await res.json();
+      const div = document.getElementById("results");
+      div.innerHTML = "<h2>Results</h2>";
+      document.getElementById("chapters").innerHTML = "";
+      document.getElementById("pages").innerHTML = "";
+
+      mangas.forEach(m => {
+        const btn = document.createElement("button");
+        btn.innerText = (isFavorite(m.id) ? "❤️ " : "") + m.title;
+        btn.onclick = () => loadChapters(m.id, m.title);
+        div.appendChild(btn);
+
+        const favBtn = document.createElement("button");
+        favBtn.innerText = "⭐";
+        favBtn.onclick = () => toggleFavorite(m);
+        div.appendChild(favBtn);
+      });
+    }
+
+    async function loadChapters(mangaId, title) {
+      const res = await fetch(`${API_BASE}/chapters/${mangaId}`);
+      const chapters = await res.json();
+      const read = getReadChapters(mangaId);
+      const div = document.getElementById("chapters");
+      div.innerHTML = `<h2>${title}</h2>`;
+      document.getElementById("pages").innerHTML = "";
+
+      chapters.forEach(ch => {
+        const btn = document.createElement("button");
+        btn.className = "chapter-button";
+        btn.innerText = `Chapter ${ch.chapter}`;
+        if (read.includes(ch.id)) btn.classList.add("read");
+        btn.onclick = () => {
+          markChapterRead(mangaId, ch.id);
+          loadPages(ch.id);
+        };
+        div.appendChild(btn);
+      });
+    }
+
+    async function loadPages(chapterId) {
+      const res = await fetch(`${API_BASE}/pages/${chapterId}`);
+      const urls = await res.json();
+      const div = document.getElementById("pages");
+      div.innerHTML = `<h2>Pages</h2>`;
+      urls.forEach(url => {
+        const img = document.createElement("img");
+        img.src = url;
+        div.appendChild(img);
+      });
+    }
+
+    function showFavorites() {
+      const favs = JSON.parse(localStorage.getItem("favorites") || "[]");
+      const div = document.getElementById("results");
+      div.innerHTML = "<h2>Your Favorites</h2>";
+      document.getElementById("chapters").innerHTML = "";
+      document.getElementById("pages").innerHTML = "";
+
+      favs.forEach(m => {
+        const btn = document.createElement("button");
+        btn.innerText = "❤️ " + m.title;
+        btn.onclick = () => loadChapters(m.id, m.title);
+        div.appendChild(btn);
+      });
+    }
+
+    // Optional: register service worker later for offline support
+    // if ('serviceWorker' in navigator) {
+    //   navigator.serviceWorker.register('/service-worker.js');
+    // }
+  </script>
+</body>
+</html>
