@@ -243,9 +243,21 @@
       document.querySelectorAll(".chapter-button").forEach(btn => {
         if (btn.dataset.id === chapter.id) btn.classList.add("read");
       });
-    }
 
-    function nextChapter() {
+      // ✅ Update progress bar after marking read
+      const read = getReadChapters(currentMangaId);
+      const readCount = read.length;
+      const total = currentChapters.length;
+      const percent = total > 0 ? Math.round((readCount / total) * 100) : 0;
+      const bar = document.getElementById("progressBar");
+      bar.style.width = percent + "%";
+      bar.className = "";
+      if (percent < 34) bar.classList.add("progress-low");
+      else if (percent < 67) bar.classList.add("progress-mid");
+      else bar.classList.add("progress-high");
+
+      document.getElementById("progressText").innerText = `Progress: ${percent}% (${readCount} of ${total})`;
+    }function nextChapter() {
       if (currentChapterIndex < currentChapters.length - 1) {
         openChapter(currentChapterIndex + 1);
       }
