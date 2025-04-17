@@ -3,32 +3,30 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
+from httpx import QueryParams
 from pathlib import Path
 
 app = FastAPI()
 
-# Serve static files like icons, manifest, images
+# Static frontend + icons
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
-# Enable CORS for frontend
+# CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in prod
+    allow_origins=["*"],  # Allow all (you can restrict later)
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Serve index.html at root
 @app.api_route("/", methods=["GET", "HEAD"])
 def serve_index():
     return FileResponse(Path("frontend/index.html"))
 
-# Health check
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
 
-# Search manga by title
 @app.get("/api/search")
 async def search(title: str):
     try:
@@ -44,6 +42,7 @@ async def search(title: str):
                 for m in res.json().get("data", [])
             ]
     except Exception as e:
+        print("🔥 SEARCH ERROR:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/manga/{manga_id}")
@@ -57,15 +56,15 @@ async def manga_detail(manga_id: str):
 
             data = res.json().get("data", {})
             attr = data.get("attributes", {})
-
-            cover_id = None
-            for rel in data.get("relationships", []):
-                if rel.get("type") == "cover_art":
-                    cover_id = rel["attributes"].get("fileName")
-                    break
+            cover_id = next(
+                (r["attributes"].get("fileName")
+                 for r in data.get("relationships", [])
+                 if r.get("type") == "cover_art"),
+                None
+            )
 
             cover_url = (
-                f"https://uploads.mangadex.org/covers/{manga_id}/{cover_id}.256.jpg"
+                f"https://uploads.mangadex.org/covers/{manga_id}/{cover_id}"
                 if cover_id else None
             )
 
@@ -80,59 +79,71 @@ async def manga_detail(manga_id: str):
         print("🔥 MANGA DETAIL ERROR:", str(e))
         raise HTTPException(status_code=500, detail=f"Failed to fetch manga details: {str(e)}")
 
-# Get all English chapters for a manga
 @app.get("/api/chapters/{manga_id}")
 async def chapters(manga_id: str):
-    try:
-        url = (
-            f"https://api.mangadex.org/chapter?"
-            f"manga={manga_id}&translatedLanguage[]=en"
-            f"&order[chapter]=asc&limit=500"
-        )
-        async with httpx.AsyncClient() as client:
-            res = await client.get(url)
-            res.raise_for_status()
-            return [
-                {
-                    "id": c["id"],
-                    "chapter": c["attributes"].get("chapter"),
-                    "title": c["attributes"].get("title")
-                }
-                for c in res.json().get("data", [])
-            ]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    async with httpx.AsyncClient() as client:
+        all_chapters = []
+        offset = 0
+        limit = 100  # MangaDex's safe max per page
 
-@app.get("/api/chapters/{manga_id}")
-async def chapters(manga_id: str):
+        while True:
+            try:
+                url = (
+                    f"https://api.mangadex.org/chapter?"
+                    f"manga={manga_id}&translatedLanguage[]=en"
+                    f"&limit={limit}&offset={offset}&order[chapter]=asc"
+                )
+                res = await client.get(url)
+                res.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 400 and offset == 0:
+                    # Try without ordering
+                    url = (
+                        f"https://api.mangadex.org/chapter?"
+                        f"manga={manga_id}&translatedLanguage[]=en"
+                        f"&limit={limit}&offset={offset}"
+                    )
+                    res = await client.get(url)
+                    res.raise_for_status()
+                else:
+                    raise
+
+            data = res.json()
+            chunk = data.get("data", [])
+            all_chapters.extend(chunk)
+
+            total = data.get("total", 0)
+            offset += limit
+
+            if offset >= total:
+                break
+
+        print(f"✅ Total chapters fetched: {len(all_chapters)}")
+
+        return [
+            {
+                "id": ch.get("id"),
+                "chapter": ch.get("attributes", {}).get("chapter"),
+                "title": ch.get("attributes", {}).get("title")
+            }
+            for ch in all_chapters
+        ]
+
+@app.get("/api/pages/{chapter_id}")
+async def pages(chapter_id: str):
     try:
-        url = (
-            f"https://api.mangadex.org/chapter?"
-            f"manga={manga_id}&translatedLanguage[]=en"
-            f"&order[chapter]=asc&limit=500"
-        )
         async with httpx.AsyncClient() as client:
-            res = await client.get(url)
+            res = await client.get(f"https://api.mangadex.org/at-home/server/{chapter_id}")
             res.raise_for_status()
 
             json_data = res.json()
-            print("🔍 RAW CHAPTER RESPONSE:")
-            print(json_data)
+            base_url = json_data["baseUrl"]
+            chapter = json_data["chapter"]
+            hash_value = chapter["hash"]
+            page_filenames = chapter["data"]
 
-            chapters_raw = json_data.get("data", [])
-
-            chapter_list = []
-            for c in chapters_raw:
-                attr = c.get("attributes", {})
-                chapter_list.append({
-                    "id": c.get("id"),
-                    "chapter": attr.get("chapter"),
-                    "title": attr.get("title")
-                })
-
-            print(f"✅ Loaded {len(chapter_list)} chapters")
-            return chapter_list
+            return [f"{base_url}/data/{hash_value}/{filename}" for filename in page_filenames]
 
     except Exception as e:
-        print("🔥 CHAPTER FETCH ERROR:", str(e))
-        raise HTTPException(status_code=500, detail=f"Chapter fetch failed: {str(e)}")
+        print("🔥 PAGE FETCH ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to load pages: {str(e)}")
