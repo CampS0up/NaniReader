@@ -116,7 +116,9 @@
       chapters.forEach(ch => {
         const btn = document.createElement("button");
         btn.className = "chapter-button";
-        btn.innerText = `Chapter ${ch.chapter}`;
+        let label = ch.chapter ? `Chapter ${ch.chapter}` : `Chapter ID ${ch.id.slice(0, 6)}…`;
+        if (ch.title) label += ` — ${ch.title}`;
+        btn.innerText = label;
         if (read.includes(ch.id)) btn.classList.add("read");
         btn.onclick = () => {
           markChapterRead(mangaId, ch.id);
